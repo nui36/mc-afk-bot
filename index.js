@@ -2,7 +2,7 @@ const mineflayer = require('mineflayer');
 const { Client, GatewayIntentBits } = require('discord.js');
 
 // ================= [ ตั้งค่าข้อมูลของคุณตรงนี้ ] =================
-process.env.DISCORD_TOKEN;
+const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const TEXT_CH_ID = '1482064161038139403'; // ห้องที่ให้บอทพิมพ์แจ้งคนเข้า-ออก
 const STATUS_VC_ID = '1482064161038139403'; // เช่น 🟢 Server: Online
 const PLAYER_VC_ID = '1482064304118304810'; // เช่น 👥 Players: 1/20
