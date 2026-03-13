@@ -1,7 +1,6 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const mineflayer = require('mineflayer');
 
-// 1. ตั้งค่า Discord Bot
 const dcClient = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -10,60 +9,87 @@ const dcClient = new Client({
     ]
 });
 
-// 2. ตั้งค่า Minecraft Bot (แก้ IP และชื่อตรงนี้)
+// --- ตั้งค่า ID ---
+const DISCORD_CHANNEL_ID = '1482064161038139403'; 
+const VOICE_CHANNEL_ID = '1482064304118304810'; 
 const mcOptions = {
     host: 'sv4.mc4.in', 
     port: 50949,
-    username: 'AFKGhost'
+    username: 'BOT'
 };
 
 let bot;
 
-// 3. ฟังก์ชันสร้างบอท Minecraft + Auto Reconnect
 function createBot() {
     if (bot) bot.quit();
     bot = mineflayer.createBot(mcOptions);
 
     bot.on('login', () => {
-        console.log('✅ บอทเข้า Minecraft สำเร็จ!');
+        console.log('✅ บอทออนไลน์');
+        const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
+        if (channel) channel.send('🟢 **เซิร์ฟเวอร์เปิดอยู่ (บอทเชื่อมต่อแล้ว)**');
+        updateVoiceChannel();
     });
 
-    bot.on('chat', (username, message) => {
-        if (username === bot.username) return;
-        console.log(`[MC] ${username}: ${message}`);
+    bot.on('playerJoined', (player) => {
+        if (player.username === bot.username) return;
+        const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
+        if (channel) channel.send(`📥 **${player.username}** joined the server`);
+        updateVoiceChannel();
     });
 
-    // ถ้าหลุดจาก MC ให้รอ 10 วินาทีแล้วเข้าใหม่
+    bot.on('playerLeft', (player) => {
+        const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
+        if (channel) channel.send(`📤 **${player.username}** left the server`);
+        updateVoiceChannel();
+    });
+
     bot.on('end', () => {
-        console.log('⚠️ บอทหลุดจาก MC กำลังเชื่อมต่อใหม่...');
+        const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
+        if (channel) channel.send('🔴 **บอทหลุดจากเซิร์ฟเวอร์ (เซิร์ฟอาจจะปิด)**');
         setTimeout(createBot, 10000);
     });
+}
 
-    bot.on('error', (err) => console.log('❌ MC Error:', err.message));
+async function updateVoiceChannel() {
+    try {
+        const voiceChannel = await dcClient.channels.fetch(VOICE_CHANNEL_ID);
+        if (voiceChannel) {
+            const count = Object.keys(bot.players).length;
+            await voiceChannel.setName(`Players Online: ${count}`);
+        }
+    } catch (err) {
+        console.log('❌ อัปเดตชื่อห้องเสียงไม่ได้:', err.message);
+    }
 }
 
 createBot();
 
-// 4. ระบบคำสั่ง Discord
 dcClient.on('messageCreate', (message) => {
     if (message.author.bot) return;
 
-    // พิมพ์ !ping ในดิสคอร์ดเพื่อเช็คว่าบอทอ่านข้อความได้ไหม
-    if (message.content === '!ping') {
-        message.reply('🟢 Pong! บอทยังออนไลน์และอ่านข้อความได้ครับ');
+    // 1. เช็คว่าบอทยังอยู่ในเกมไหม (In-game Check)
+    if (message.content === '!check') {
+        if (bot && bot.entity) {
+            message.reply(`✅ บอทออนไลน์อยู่ในเกมที่พิกัด: ${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.z)}`);
+        } else {
+            message.reply('🔴 บอทไม่อยู่ในเซิร์ฟเวอร์ Minecraft ขณะนี้');
+        }
     }
 
-    // สั่งให้บอทพิมพ์ข้อความเข้าไปในเกม Minecraft
-    if (message.content.startsWith('!say ')) {
-        const text = message.content.slice(5);
+    // 2. เช็คการตอบสนองของบอท Discord (Responsiveness Check)
+    if (message.content === '!ping') {
+        message.reply('🏓 **Pong!** ระบบสั่งการยังทำงานปกติครับ');
+    }
+
+    // คำสั่ง !bc
+    if (message.content.startsWith('!bc ')) {
+        const text = message.content.slice(4);
         if (bot && bot.entity) {
-            bot.chat(text);
-            message.reply(`📤 ส่งข้อความเข้าเกม: ${text}`);
-        } else {
-            message.reply('❌ บอทไม่ได้อยู่ในเซิร์ฟเวอร์ MC ในขณะนี้');
+            bot.chat(`/title @a title {"text":"${text}","color":"gold","bold":true}`);
+            message.reply(`✅ ประกาศเรียบร้อย`);
         }
     }
 });
 
-dcClient.login(process.env.DISCORD_TOKEN);
 dcClient.login(process.env.DISCORD_TOKEN);
