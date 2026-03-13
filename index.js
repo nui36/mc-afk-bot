@@ -19,48 +19,58 @@ const mcOptions = {
 };
 
 let bot;
+let reconnectTimeout;
 
 function createBot() {
-    if (bot) bot.quit();
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    if (bot) {
+        bot.removeAllListeners();
+        try { bot.quit(); } catch (e) {}
+    }
+
+    console.log('🔄 [System] กำลังพยายามเชื่อมต่อ...');
     bot = mineflayer.createBot(mcOptions);
 
+    // --- ฟีเจอร์แก้ปัญหา Addons/Resource Pack ---
+    bot.on('resourcePack', (url, hash) => {
+        console.log('📦 เซิร์ฟเวอร์ขอให้โหลด Resource Pack... กำลังตอบรับอัตโนมัติ');
+        bot.acceptResourcePack(); // สั่งให้บอทยอมรับทันที
+    });
+
     bot.on('login', () => {
-        console.log('✅ บอทออนไลน์');
+        console.log('✅ ออนไลน์สำเร็จ');
         const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
-        if (channel) channel.send('🟢 **เซิร์ฟเวอร์เปิดอยู่ (บอทเชื่อมต่อแล้ว)**');
-        updateVoiceChannel();
-    });
-
-    bot.on('playerJoined', (player) => {
-        if (player.username === bot.username) return;
-        const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
-        if (channel) channel.send(`📥 **${player.username}** joined the server`);
-        updateVoiceChannel();
-    });
-
-    bot.on('playerLeft', (player) => {
-        const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
-        if (channel) channel.send(`📤 **${player.username}** left the server`);
+        if (channel) channel.send('🟢 **บอทเข้าเซิร์ฟเวอร์สำเร็จแล้ว!**');
         updateVoiceChannel();
     });
 
     bot.on('end', () => {
-        const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
-        if (channel) channel.send('🔴 **บอทหลุดจากเซิร์ฟเวอร์ (เซิร์ฟอาจจะปิด)**');
-        setTimeout(createBot, 10000);
+        console.log('⚠️ หลุดจากเซิร์ฟเวอร์... จะลองใหม่ใน 15 วินาที');
+        handleReconnect();
+    });
+
+    bot.on('error', (err) => {
+        console.log(`❌ Error: ${err.message}`);
+        handleReconnect();
     });
 }
 
+function handleReconnect() {
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    reconnectTimeout = setTimeout(() => {
+        createBot();
+    }, 15000); // รอ 15 วินาที
+}
+
+// ระบบนับคนออนไลน์
 async function updateVoiceChannel() {
     try {
         const voiceChannel = await dcClient.channels.fetch(VOICE_CHANNEL_ID);
-        if (voiceChannel) {
+        if (voiceChannel && bot.players) {
             const count = Object.keys(bot.players).length;
             await voiceChannel.setName(`Players Online: ${count}`);
         }
-    } catch (err) {
-        console.log('❌ อัปเดตชื่อห้องเสียงไม่ได้:', err.message);
-    }
+    } catch (e) {}
 }
 
 createBot();
@@ -68,26 +78,27 @@ createBot();
 dcClient.on('messageCreate', (message) => {
     if (message.author.bot) return;
 
-    // 1. เช็คว่าบอทยังอยู่ในเกมไหม (In-game Check)
+    // 1. คำสั่งบังคับเข้า (Force Join)
+    if (message.content === '!join') {
+        message.reply('🚀 **บอทกำลังเริ่มการเชื่อมต่อใหม่ทันที (Force Join)...**');
+        createBot();
+    }
+
+    // 2. เช็คสถานะ
     if (message.content === '!check') {
-        if (bot && bot.entity) {
-            message.reply(`✅ บอทออนไลน์อยู่ในเกมที่พิกัด: ${Math.round(bot.entity.position.x)}, ${Math.round(bot.entity.position.z)}`);
-        } else {
-            message.reply('🔴 บอทไม่อยู่ในเซิร์ฟเวอร์ Minecraft ขณะนี้');
-        }
+        const status = (bot && bot.entity) ? '✅ บอทอยู่ในเกม' : '🔴 บอทอยู่นอกเกม (กำลังพยายามเข้า)';
+        message.reply(status);
     }
 
-    // 2. เช็คการตอบสนองของบอท Discord (Responsiveness Check)
-    if (message.content === '!ping') {
-        message.reply('🏓 **Pong!** ระบบสั่งการยังทำงานปกติครับ');
-    }
-
-    // คำสั่ง !bc
+    // 3. ประกาศ (Broadcast)
     if (message.content.startsWith('!bc ')) {
         const text = message.content.slice(4);
         if (bot && bot.entity) {
             bot.chat(`/title @a title {"text":"${text}","color":"gold","bold":true}`);
+            bot.chat(`📢 [ประกาศ]: ${text}`);
             message.reply(`✅ ประกาศเรียบร้อย`);
+        } else {
+            message.reply('❌ บอทไม่อยู่ในเกม (ลองพิมพ์ !join เพื่อบังคับเข้า)');
         }
     }
 });
