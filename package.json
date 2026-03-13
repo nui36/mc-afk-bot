@@ -1,13 +1,14 @@
 {
-  "name": "mc-ghost-bot",
+  "name": "mc-afk-bot",
   "version": "1.0.0",
+  "description": "Minecraft AFK Bot",
   "main": "index.js",
-  "dependencies": {
-    "discord.js": "^14.13.0",
-    "mineflayer": "^4.14.0",
-    "bedrock-protocol": "latest"
-  },
   "scripts": {
     "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.13.0",
+    "mineflayer": "latest",
+    "bedrock-protocol": "latest"
   }
 }
