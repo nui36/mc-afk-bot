@@ -1,8 +1,13 @@
 {
+  "name": "mc-ghost-bot",
+  "version": "1.0.0",
+  "main": "index.js",
   "dependencies": {
     "discord.js": "^14.13.0",
     "mineflayer": "^4.14.0",
-    "bedrock-protocol": "^1.24.0"
+    "bedrock-protocol": "latest"
   },
-  "scripts": { "start": "node index.js" }
+  "scripts": {
+    "start": "node index.js"
+  }
 }
