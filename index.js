@@ -9,9 +9,9 @@ const dcClient = new Client({
     ]
 });
 
-// --- ตั้งค่า ID ---
+// --- ข้อมูลการเชื่อมต่อ (เช็คให้ตรงกับเซิร์ฟเวอร์ของคุณ) ---
 const DISCORD_CHANNEL_ID = '1482064161038139403'; 
-const VOICE_CHANNEL_ID = '1482064304118304810'; 
+const VOICE_CHANNEL_ID = '1482064304118304810';
 const mcOptions = {
     host: 'sv4.mc4.in', 
     port: 50949,
@@ -21,48 +21,60 @@ const mcOptions = {
 let bot;
 let reconnectTimeout;
 
+// ฟังก์ชันรายงานสถานะไปที่ Discord เพื่อให้คุณดูความคืบหน้า
+function report(msg) {
+    console.log(msg);
+    const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
+    if (channel) channel.send(msg).catch(e => console.error('Discord Send Error:', e.message));
+}
+
 function createBot() {
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    
+    // ล้างบอทเก่าป้องกันการค้าง
     if (bot) {
         bot.removeAllListeners();
         try { bot.quit(); } catch (e) {}
     }
 
-    console.log('🔄 [System] กำลังพยายามเชื่อมต่อ...');
+    report('⏳ **[System]** กำลังพยายามเชื่อมต่อ Minecraft... (รอการตอบรับจากเซิร์ฟเวอร์)');
+    
     bot = mineflayer.createBot(mcOptions);
 
-    // --- ฟีเจอร์แก้ปัญหา Addons/Resource Pack ---
-    bot.on('resourcePack', (url, hash) => {
-        console.log('📦 เซิร์ฟเวอร์ขอให้โหลด Resource Pack... กำลังตอบรับอัตโนมัติ');
-        bot.acceptResourcePack(); // สั่งให้บอทยอมรับทันที
+    // แก้ปัญหา Addons: ยอมรับ Resource Pack อัตโนมัติ
+    bot.on('resourcePack', () => {
+        report('📦 **[Addon]** ตรวจพบ Resource Pack! กำลังกดยอมรับอัตโนมัติเพื่อให้เข้าเกมได้...');
+        bot.acceptResourcePack();
     });
 
     bot.on('login', () => {
-        console.log('✅ ออนไลน์สำเร็จ');
-        const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
-        if (channel) channel.send('🟢 **บอทเข้าเซิร์ฟเวอร์สำเร็จแล้ว!**');
+        report('✅ **[Success]** บอทล็อกอินสำเร็จ! กำลังรอตัวละครเกิด...');
+    });
+
+    bot.on('spawn', () => {
+        report('🌍 **[World]** บอทเกิดในโลกเรียบร้อยแล้ว! พร้อมสแตนด์บาย');
         updateVoiceChannel();
     });
 
-    bot.on('end', () => {
-        console.log('⚠️ หลุดจากเซิร์ฟเวอร์... จะลองใหม่ใน 15 วินาที');
+    // ถ้าเข้าไม่ได้ หรือเซิร์ฟปิด (ECONNREFUSED)
+    bot.on('error', (err) => {
+        let errorType = err.code === 'ECONNREFUSED' ? 'เซิร์ฟเวอร์ยังไม่เปิด/พอร์ตปิด' : err.message;
+        report(`❌ **[Error]** เชื่อมต่อไม่ได้: ${errorType} (จะลองใหม่ใน 20 วินาที)`);
         handleReconnect();
     });
 
-    bot.on('error', (err) => {
-        console.log(`❌ Error: ${err.message}`);
+    bot.on('end', () => {
+        report('⚠️ **[Status]** การเชื่อมต่อสิ้นสุดลง... กำลังเตรียม Reconnect');
         handleReconnect();
     });
 }
 
 function handleReconnect() {
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
-    reconnectTimeout = setTimeout(() => {
-        createBot();
-    }, 15000); // รอ 15 วินาที
+    reconnectTimeout = setTimeout(() => createBot(), 20000); // พยายามใหม่ทุก 20 วินาที
 }
 
-// ระบบนับคนออนไลน์
+// อัปเดตจำนวนคนในห้องเสียง
 async function updateVoiceChannel() {
     try {
         const voiceChannel = await dcClient.channels.fetch(VOICE_CHANNEL_ID);
@@ -70,35 +82,40 @@ async function updateVoiceChannel() {
             const count = Object.keys(bot.players).length;
             await voiceChannel.setName(`Players Online: ${count}`);
         }
-    } catch (e) {}
+    } catch (e) {
+        console.log('Voice Channel Update Error (อาจติด Rate Limit)');
+    }
 }
 
-createBot();
+// ระบบนับคนเข้า-ออก
+dcClient.once('ready', () => {
+    console.log(`🤖 Discord Bot ออนไลน์: ${dcClient.user.tag}`);
+    createBot();
+});
 
-dcClient.on('messageCreate', (message) => {
+dcClient.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
-    // 1. คำสั่งบังคับเข้า (Force Join)
+    // 1. เช็คว่า Discord บอทยังตอบไหม
+    if (message.content === '!ping') {
+        return message.reply('🏓 **Pong!** ระบบ Discord ทำงานปกติ (ถ้าไม่มี Log อื่นขึ้นแสดงว่าบอทติด Error ที่ตัว Minecraft)');
+    }
+
+    // 2. บังคับเข้าเกมทันที
     if (message.content === '!join') {
-        message.reply('🚀 **บอทกำลังเริ่มการเชื่อมต่อใหม่ทันที (Force Join)...**');
+        report('🚀 **[Command]** บังคับเชื่อมต่อใหม่ทันที...');
         createBot();
     }
 
-    // 2. เช็คสถานะ
-    if (message.content === '!check') {
-        const status = (bot && bot.entity) ? '✅ บอทอยู่ในเกม' : '🔴 บอทอยู่นอกเกม (กำลังพยายามเข้า)';
-        message.reply(status);
-    }
-
-    // 3. ประกาศ (Broadcast)
+    // 3. ประกาศข้อความ (!bc)
     if (message.content.startsWith('!bc ')) {
         const text = message.content.slice(4);
         if (bot && bot.entity) {
             bot.chat(`/title @a title {"text":"${text}","color":"gold","bold":true}`);
-            bot.chat(`📢 [ประกาศ]: ${text}`);
-            message.reply(`✅ ประกาศเรียบร้อย`);
+            bot.chat(`📢 [ประกาศจาก Discord]: ${text}`);
+            message.reply(`✅ ประกาศข้อความ "${text}" เรียบร้อย`);
         } else {
-            message.reply('❌ บอทไม่อยู่ในเกม (ลองพิมพ์ !join เพื่อบังคับเข้า)');
+            message.reply('❌ บอทไม่อยู่ในเกม ประกาศไม่ได้ครับ');
         }
     }
 });
