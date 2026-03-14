@@ -19,13 +19,16 @@ let serverInfo = { host: null, port: null };
 function report(msg) {
     console.log(msg);
     const channel = dcClient.channels.cache.get(DISCORD_CHANNEL_ID);
-    if (channel) channel.send(msg).catch(() => {});
+    if (channel) {
+        channel.send(msg).catch(() => {});
+    }
 }
 
 function createBot() {
     if (!serverInfo.host || !serverInfo.port) return;
 
     if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    
     if (bot) {
         bot.removeAllListeners();
         try { bot.quit(); } catch (e) {}
@@ -41,6 +44,7 @@ function createBot() {
     });
 
     bot.on('login', () => report('✅ **[Login]** บอทล็อกอินสำเร็จ!'));
+    
     bot.on('spawn', () => report('🌍 **[Spawn]** บอทออนไลน์ในโลกเรียบร้อย!'));
     
     bot.on('resourcePack', () => {
@@ -66,8 +70,7 @@ function handleReconnect() {
 
 dcClient.once('ready', () => {
     console.log(`🤖 Discord Bot ออนไลน์: ${dcClient.user.tag}`);
-    // ทันทีที่รัน บอทจะถามหา IP ทันที
-    report('👋 **สวัสดีครับ! ผมพร้อมทำงานแล้ว**\nกรุณาพิมพ์: `!set [IP] [PORT]` เพื่อเริ่มการเชื่อมต่อครับ');
+    report('👋 **สวัสดีครับ! ระบบพร้อมทำงานแล้ว**\nกรุณาพิมพ์: `!set [IP] [PORT]` เพื่อเริ่มการเชื่อมต่อครับ');
 });
 
 dcClient.on('messageCreate', async (message) => {
@@ -76,7 +79,9 @@ dcClient.on('messageCreate', async (message) => {
     // 1. คำสั่งตั้งค่า IP/Port
     if (message.content.startsWith('!set ')) {
         const parts = message.content.split(' ');
-        if (parts.length < 3) return message.reply('❌ รูปแบบผิด! ต้องเป็น `!set [IP] [PORT]`');
+        if (parts.length < 3) {
+            return message.reply('❌ รูปแบบผิด! ต้องเป็น `!set [IP] [PORT]`');
+        }
 
         serverInfo.host = parts[1];
         serverInfo.port = parts[2];
@@ -93,39 +98,12 @@ dcClient.on('messageCreate', async (message) => {
     // 3. คำสั่งประกาศ (Broadcast)
     if (message.content.startsWith('!bc ')) {
         const text = message.content.slice(4);
-        if (bot?.entity) {
+        if (bot && bot.entity) {
             bot.chat(`/title @a title {"text":"${text}","color":"gold"}`);
             bot.chat(`📢 [ประกาศ]: ${text}`);
             message.reply('✅ ประกาศสำเร็จ');
         } else {
             message.reply('❌ บอทยังไม่ได้เข้าเกม (พิมพ์ !set ก่อน)');
-        }
-    }
-});
-
-dcClient.login(process.env.DISCORD_TOKEN);
-        if (bot && bot.entity) {
-            bot.chat(`/title @a title {"text":"${text}","color":"gold","bold":true}`);
-            bot.chat(`📢 [ประกาศ]: ${text}`);
-            message.reply('✅ ประกาศเรียบร้อย');
-        } else {
-            message.reply('❌ บอทยังไม่ได้เข้าเกม (พิมพ์ !setup ก่อน)');
-        }
-    }
-});
-
-dcClient.login(process.env.DISCORD_TOKEN);
-        createBot();
-    }
-
-    if (message.content.startsWith('!bc ')) {
-        const text = message.content.slice(4);
-        if (bot && bot.entity) {
-            bot.chat(`/title @a title {"text":"${text}","color":"gold","bold":true}`);
-            bot.chat(`📢 [ประกาศ]: ${text}`);
-            message.reply(`✅ ประกาศเรียบร้อย`);
-        } else {
-            message.reply('❌ บอทไม่อยู่ในเกมครับ');
         }
     }
 });
